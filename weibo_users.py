@@ -88,6 +88,8 @@ def get_bilaterals_data(bilaterals, number):
         if (bilaterals.users[index]['province'] == str(g_city_code)):
             uid = bilaterals.users[index]['id']
             name = bilaterals.users[index]['name']
+            if ('' == name or None == name):
+                continue
             description = bilaterals.users[index]['description']
             url = bilaterals.users[index]['url']
             gender = bilaterals.users[index]['gender']

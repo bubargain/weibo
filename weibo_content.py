@@ -57,12 +57,6 @@ g_name			= ""
 g_person_counter	= 0
 
 
-def timestamp():
-    return time.strftime('%Y-%m-%d %X ', time.localtime(time.time()))
-
-def logging(content):
-    print(timestamp() + content)
-
 def do_auth():
     logging = Logging.get_logger('do_auth')
     auth = OAuthHandler(APP_KEY, APP_SECRET, BACK_URL)
@@ -82,193 +76,164 @@ def do_auth():
     return api
 
 
-def fetch_one_user_bilaterals(api, _uid):
-    all_bilaterals = []
-    bilaterals = api.show_bilateral(uid=_uid, count=g_one_page_count, page=1)
-    bilaterals_number = len(bilaterals.users)
-    logging("[FETCH_ONE]: Get %d bilaterals this time." % bilaterals_number)
-    all_bilaterals.extend(get_bilaterals_data(bilaterals, bilaterals_number)) 
-    bilaterals_total_number = bilaterals.total_number
-    logging("[FETCH_ONE]: There are %d bilaterals of uid:%s " % (bilaterals_total_number, _uid))
-    if (bilaterals_total_number >= bilaterals_number): 
-        page_number = get_page_number(bilaterals_total_number, g_one_page_count)
-        logging("[FETCH_ONE]: There are %d pages in total." % page_number)
-        for p in range(2, page_number+1): # page 1 has been got
-            bilaterals = api.show_bilateral(uid=_uid, count=g_one_page_count, page=p)
-            bilaterals_number = len(bilaterals.users)
-            logging("[FETCH_ONE]: Get %d bilaterals this time." % bilaterals_number)
-            all_bilaterals.extend(get_bilaterals_data(bilaterals, bilaterals_number)) 
-        #logging(all_bilaterals)
-        return all_bilaterals
-    else:
-        logging("[FETCH_ERROR]: Error When fetch one user's bilaterals!!! =====>>>>>>> total_number: %d, one_page_count: %d" % (bilaterals_total_number, bilaterals_number)) 
-        return False
+def fetch_one_user_statuses(api, _uid):
+    logging = Logging.get_logger('fetch_one_user_statuses')
+    all_statuses = []
+    page_number = 1
+    logging.info("count = %s" % g_one_page_count)
+    logging.info("page = %s" % page_number)
+    statuses = api.user_timeline(user_id=_uid, count=g_one_page_count, page=page_number)
+    statuses_number = len(statuses)
+    logging.info("Get %d statuses this time." % statuses_number)
+    all_statuses.extend(get_statuses_data(statuses, statuses_number, _uid)) 
+    while (statuses_number > 0):
+        page_number += 1
+        statuses = api.user_timeline(user_id=_uid, count=g_one_page_count, page=page_number)
+        statuses_number = len(statuses)
+        logging.info("Get %d statuses this time." % statuses_number)
+        if (0 == statuses_number):
+            logging.info("Have got all statuses of the user: %s" % _uid)
+            break;
+        else:
+            all_statuses.extend(get_statuses_data(statuses, statuses_number, _uid))   
+    #logging.info("all_statuses:  %s " % all_statuses)
+    return all_statuses
+        
 
-
-def get_bilaterals_data(bilaterals, number):
+def get_statuses_data(statuses, number, uid):
+    logging = Logging.get_logger('get_statuses_data')
     data = []
     for index in range(0, number):
-        #logging("province = %s" % bilaterals.users[index]['province'])
-        if (bilaterals.users[index]['province'] == str(g_city_code)):
-            uid = bilaterals.users[index]['id']
-            name = bilaterals.users[index]['name']
-            logging("uid = %s    name = %s" % (uid, name))
-            data.append((uid, name))
-            #logging(data)
-    #logging("[GET_DATA]: Get bilaterals data OK!! ====----====---->>> data: %s" % data)
-    #logging("[GET_DATA]: Get bilaterals data OK!! ")
+        if ('转发微博。' != statuses[index].text):
+            gender = statuses[index].user.gender
+            location = statuses[index].user.location
+            loc = location.split(' ')
+            province = loc[0]
+            city = loc[1]
+            weibo_id = str(statuses[index].id)
+            created_at = str(statuses[index].created_at)
+            source = statuses[index].source
+            text = statuses[index].text
+            data.append((uid, gender, province, city, weibo_id, created_at, source, text))
+            #logging.info(str(data))
     return data
 
 
-def get_page_number(total_number, page_number):
-    if (total_number % page_number != 0):
-        return int(total_number/page_number) + 1
-    else:
-        return int(total_number/page_number)
 
-
-def is_exist(conn, uid):
+def is_exist(conn, weibo_id):
+    logging = Logging.get_logger('is_exist')
     cursor = conn.cursor()
-    sql = "select id from temp_users where uid = %s"
-    param = uid
+    sql = "select id from statuses where weibo_id = %s"
+    param = weibo_id
     n = cursor.execute(sql, param)
     if (0 == n):
-        #logging("[CHECK_EXIST]: The user does not exist in temp, uid = %s" % uid)
-        sql = "select id from users where uid = %s"
-        n = cursor.execute(sql, param)
-        if (0 == n):
-            #logging("[CHECK_EXIST]: The user does not exist in users, uid = %s" % uid)
-            cursor.close()
-            return False
-        elif (1 == n):
-            #logging("[CHECK_EXIST]: Exist in users, uid = %s" % uid)
-            cursor.close()
-            return True
-        else:
-            logging("[CHECK_EXIST_ERROR]: Error Occured when check the uid = %s in users" % uid)
-            cursor.close()
-            conn.close()
-            logging("[INFO]: Stored " + str(g_stored_counter) + " New Person In Total!")
-            sys.exit(1)
+        cursor.close()
+        return False
     elif (1 == n):
-        #logging("[CHECK_EXIST]: Exist in temp, uid = %s" % uid)
+        #logging.info("Exist in users, uid = %s" % uid)
         cursor.close()
         return True
     else:
-        logging("[CHECK_EXIST_ERROR]: Error Occured when check the uid = %s in temp" % uid)
+        logging.error("Error Occured when check the uid = %s in users" % uid)
         cursor.close()
         conn.close()
-        logging("[INFO]: Stored " + str(g_stored_counter) + " New Person In Total!")
+        logging.info("Stored " + str(g_stored_counter) + " New Person In Total!")
         sys.exit(1)
 
 
-def reset_extended(conn, uid):
-    cursor = conn.cursor()
-    sql = "update users set extended='T' where uid = %s"
-    param = uid
-    n = cursor.execute(sql, param)
-    if (n >= 0):
-        logging("[RESET_EXTENDED]: Reset Extended Flag OK!")
-        cursor.close()
-        return True
-    else:
-        logging("[RESET_EXTENDED_ERROR]: Reset Extended Flag FAILED!!!")
-        cursor.close()
-        return False
 
 
-def store_one_user_bilaterals(conn, bilaterals):
+def store_one_user_statuses(conn, statuses):
     global g_stored_counter
+    logging = Logging.get_logger('store_one_user_statuses')
     cursor = conn.cursor()
-    sql = "insert into temp_users (uid, nick_name) values(%s,%s)"
-    for b in bilaterals:
-        #logging("[STORE_BILATERALS]: one of them b: " + str(b))
-        if (not is_exist(conn, b[0])):
-            #logging("[STORE_BILATERALS]: This is a new user!!!")
-            param = b
+    sql = "insert into statuses (uid, gender, province, city, weibo_id, created_at, source, text) values(%s,%s,%s,%s,%s,%s,%s,%s)"
+    for s in statuses:
+        #logging.info("one of them statuses: " + str(s))
+        if (not is_exist(conn, s[1])):
+            #logging.info("This is a new status")
+            #logging.info("current status: %s" % str(s))
+            param = s
             n = cursor.execute(sql, param)
             if (1 == n):
-                #logging("[STORE_ONE_BILATERALS]: Store bilateral uid = %s, name= %s OK!!" % (b[0], b[1]))
+                #logging.info("Store statuses uid = %s  weibo_id = %s OK!!" % (uid, s[1]))
                 g_stored_counter += 1
             else:
-                logging("[STORE_ONE_BILATERALS_ERROR]: Error Occured when store the user of uid = %s, name= %s +++=================------>>>>>>>>>>><<<<<<<<<<<------===============" % (b[0], b[1]))
+                logging.error("Error Occured when store the status of uid = %s, weibo_id = %s +++=================------>>>>>>>>>>><<<<<<<<<<<------===============" % (s[0], s[1]))
                 cursor.close()
                 return False
         else:
             pass
-            #logging("[STORE_BILATERALS]: This user has been stored!!! uid = %s, name = %s" % (b[0], b[1]))
     cursor.close()
     return True
 
 
 
 def fetch_users(conn):
+    logging = Logging.get_logger('fetch_users')
     if (Mode.FROM_DB == g_mode):
-        logging("[FETCH_USERS_DB]: DB MODE!!! ")
+        logging.info("DB MODE!!! ")
         sql = "select uid from users limit %s"
         param = int(g_fetch_users_number)
     elif (Mode.FROM_NAME == g_mode):
         return [(g_name,)]
-        #logging("[FETCH_USERS_NAME]: NAME MODE!!! ")
-        #sql = "select uid from users where nick_name = %s"
-        #param = g_name
     else:
-        logging("[FETCH_USERS_ERROR]: MODE IS NOT EXIST!!! ====================<><><><><><><><><><>==================== ")
+        logging.error("MODE IS NOT EXIST!!! ====================<><><><><><><><><><>==================== ")
         return False
     cursor = conn.cursor()
     n = cursor.execute(sql, param)
     if (Mode.FROM_DB == g_mode and g_fetch_users_number == n):
-        logging("[FETCH_USERS_DB]: Fetch %d users Successfully" % n)
+        logging.info("Fetch %d users Successfully" % n)
         uids = cursor.fetchall()
         cursor.close()
-        logging("[FETCH_USERS_DB]: To Process Users: " + str(uids))
+        logging.info("To Process Users: " + str(uids))
         return uids
     elif (Mode.FROM_DB == g_mode and n >= 0):
-        logging("[FETCH_USERS_DB]: There is less than %d users, Fetched %d users Successfully" % (g_fetch_users_number, n))
+        logging.info("There is less than %d users, Fetched %d users Successfully" % (g_fetch_users_number, n))
         uids = cursor.fetchall()
         cursor.close()
         return uids
     elif (Mode.FROM_NAME == g_mode and 1 == n):
-        logging("[FETCH_USERS_NAME]: Fetched user: %s Successfully!" % g_name)
+        logging.info("Fetched user: %s Successfully!" % g_name)
         uid = cursor.fetchone()
-        logging("[FETCH_USERS_NAME]: name: %s    uid: %s" % (g_name, str(uid)))
+        logging.info("name: %s    uid: %s" % (g_name, str(uid)))
         cursor.close()
         return [uid]
     elif (0 == n):
-        logging("[FETCH_USER_WARNING]: NO SUCH USER in DB!")
+        logging.warning("NO SUCH USER in DB!")
         cursor.close()
         return False
     else:
-        logging("[FETCH_USERS_ERROR]: Database Operation ERROR!! n = %d" % n)
+        logging.error("Database Operation ERROR!! n = %d" % n)
         cursor.close()
         return False
         
 
-def fetch_store_one_user_weibo(conn, api, uid):
-    logging = Logging.get_logger('fetch_store_one_user_weibo')
-    fetch_result = fetch_one_user_weibo(api, uid)
-    logging.info("fetch_result: %s" % fetch_result)
+def fetch_store_one_user_statuses(conn, api, uid):
+    logging = Logging.get_logger('fetch_store_one_user_statuses')
+    fetch_result = fetch_one_user_statuses(api, uid)
+    #logging.info("fetch_result: %s" % fetch_result)
     if (False == fetch_result):
-        logging.error("ERROR Occured when fetching weibo")
+        logging.error("ERROR Occured when fetching statuses")
         return False
     else:
-        logging.info("Fetch weibo of uid: %s OK!!" % uid)
-        if (False == store_one_user_weibo(conn, fetch_result)):
-            logging.error("ERROR Occured when storing weibo!")
+        logging.info("Fetch statuses of uid: %s OK!!" % uid)
+        if (False == store_one_user_statuses(conn, fetch_result)):
+            logging.error("ERROR Occured when storing statuses!")
             return False
         else:
-            logging.info("Store weibo of uid: %s OK!!" % uid)
+            logging.info("Store statuses of uid: %s OK!!" % uid)
             return True
 
 
-def fetch_store_weibo(conn, api, uids):
+def fetch_store_statuses(conn, api, uids):
     global g_person_counter
-    logging = Logging.get_logger('fetch_store_weibo')
+    logging = Logging.get_logger('fetch_store_statuses')
     logging.info("uids: %s" % str(uids))
     for uid in uids:
         g_person_counter += 1
         logging.info("----------=-=-=-=-=-=-=-=-=-=========================--==-=-=-=-=->.>.>.>.>.>.>>>>>> person: %d START!!" % g_person_counter)
-        if (True == fetch_store_one_user_weibo(conn, api, uid[0])):
+        if (True == fetch_store_one_user_statuses(conn, api, uid[0])):
             logging.info("-----------=-=-=-=-=-=-=-=-=-==========================---=-=-=-=-=-=-=-=-=--=-=-=-=-=-=-=>>>>>>>>>>> person: %d END!!" % g_person_counter)
         else:
             logging.error("Error Occured when process the person: %d   uid: %s", (g_person_counter, uid[0]))
@@ -276,8 +241,8 @@ def fetch_store_weibo(conn, api, uids):
     logging.info("Fetch and Store %d persons Successfully!" % g_person_counter)
     return True
 
-def fetch_weibo_to_database(conn):
-    logging = Logging.get_logger('fetch_weibo_to_database')
+def fetch_statuses_to_database(conn):
+    logging = Logging.get_logger('fetch_statuses_to_database')
     fetch_users_result = fetch_users(conn)
     if (False == fetch_users_result):
         logging.error("Error Occured When Fetching Users!!")
@@ -289,12 +254,11 @@ def fetch_weibo_to_database(conn):
     logging.info("Start to do Auth!!! ==============>>>>> ^_^")
     api = do_auth()
     logging.info("Done Auth!!! ==============>>>>> ^_^")
-    #bilaterals = fetch_bilaterals(api, uids)
-    if (True == fetch_store_weibo(conn, api, uids)):
-        logging.info("Store All weibo Successfully!!!")
+    if (True == fetch_store_statuses(conn, api, uids)):
+        logging.info("Store All statuses Successfully!!!")
         return True
     else:
-        logging.error("Store All weibo Failed!!!")
+        logging.error("Store All statuses Failed!!!")
         return False
 
 
@@ -302,6 +266,7 @@ def fetch_weibo_to_database(conn):
 
 def main():
     global g_one_page_count, g_fetch_users_number, g_mode, g_name
+    logging = Logging.get_logger('main')
     try:
         opts,args = getopt.getopt(sys.argv[1:],"p:c:u:n:")
         for op,value in opts:
@@ -311,21 +276,21 @@ def main():
                 g_fetch_users_number = int(value)
             elif op == "-n":
                 g_name = str(value)
-                logging(g_name)
+                logging.info(g_name)
                 g_mode = Mode.FROM_NAME
         print(opts)  
         print(args) 
     except getopt.GetoptError:
-        logging("[ERROR]: Params are not defined well!")
-        logging("[INFO]: Stored " + str(g_stored_counter) + " New Person In Total!")
+        logging.error("Params are not defined well!")
+        logging.info("Stored " + str(g_stored_counter) + " New Person In Total!")
         sys.exit(1)
 
-    logging("START")
+    logging.info("START")
     conn = pymysql.connect(host="ec2-204-236-172-73.us-west-1.compute.amazonaws.com", user="root", passwd="RooT", db="spider", charset="utf8")
-    fetch_weibo_to_database(conn)
+    fetch_statuses_to_database(conn)
     conn.close()
-    logging("[INFO]: Stored " + str(g_stored_counter) + " New Person In Total!")
-    logging("END")
+    logging.info("Stored " + str(g_stored_counter) + " New Statuses In Total!")
+    logging.info("END")
 
 
 
