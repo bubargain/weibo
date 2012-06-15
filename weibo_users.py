@@ -58,27 +58,28 @@ def do_auth():
     return api
 
 
+
 def fetch_one_user_bilaterals(api, _uid):
     all_bilaterals = []
-    bilaterals = api.show_bilateral(uid=_uid, count=g_one_page_count, page=1)
+    page_number = 1
+    #logging("[FETCH_ONE]: count = %s" % g_one_page_count)
+    #logging("[FETCH_ONE]: page = %s" % page_number)
+    bilaterals = api.show_bilateral(uid=_uid, count=g_one_page_count, page=page_number)
     bilaterals_number = len(bilaterals.users)
     logging("[FETCH_ONE]: Get %d bilaterals this time." % bilaterals_number)
-    all_bilaterals.extend(get_bilaterals_data(bilaterals, bilaterals_number)) 
-    bilaterals_total_number = bilaterals.total_number
-    logging("[FETCH_ONE]: There are %d bilaterals of uid:%s " % (bilaterals_total_number, _uid))
-    if (bilaterals_total_number >= bilaterals_number): 
-        page_number = get_page_number(bilaterals_total_number, g_one_page_count)
-        logging("[FETCH_ONE]: There are %d pages in total." % page_number)
-        for p in range(2, page_number+1): # page 1 has been got
-            bilaterals = api.show_bilateral(uid=_uid, count=g_one_page_count, page=p)
-            bilaterals_number = len(bilaterals.users)
-            logging("[FETCH_ONE]: Get %d bilaterals this time." % bilaterals_number)
-            all_bilaterals.extend(get_bilaterals_data(bilaterals, bilaterals_number)) 
-        #logging(all_bilaterals)
-        return all_bilaterals
-    else:
-        logging("[FETCH_ERROR]: Error When fetch one user's bilaterals!!! =====>>>>>>> total_number: %d, one_page_count: %d" % (bilaterals_total_number, bilaterals_number)) 
-        return False
+    all_bilaterals.extend(get_bilaterals_data(bilaterals, bilaterals_number))
+    while (bilaterals_number > 0):
+        page_number += 1
+        bilaterals = api.show_bilateral(uid=_uid, count=g_one_page_count, page=page_number)
+        bilaterals_number = len(bilaterals.users)
+        logging("[FETCH_ONE]: Get %d bilaterals this time." % bilaterals_number)
+        if (0 == bilaterals_number):
+            logging("[FETCH_ONE]: Have got all bilaterals of the user: %s" % _uid)
+            break;
+        else:
+            all_bilaterals.extend(get_bilaterals_data(bilaterals, bilaterals_number))
+    #logging("[FETCH_ONE]: all_bilaterals:  %s " % all_bilaterals)
+    return all_bilaterals
 
 
 def get_bilaterals_data(bilaterals, number):
@@ -113,13 +114,6 @@ def get_bilaterals_data(bilaterals, number):
     #logging("[GET_DATA]: Get bilaterals data OK!! ====----====---->>> data: %s" % data)
     #logging("[GET_DATA]: Get bilaterals data OK!! ")
     return data
-
-
-def get_page_number(total_number, page_number):
-    if (total_number % page_number != 0):
-        return int(total_number/page_number) + 1
-    else:
-        return int(total_number/page_number)
 
 
 def is_exist(conn, uid):
