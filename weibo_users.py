@@ -309,7 +309,7 @@ def main():
         sys.exit(1)
 
     logging("START")
-    conn = pymysql.connect(host="ec2-204-236-172-73.us-west-1.compute.amazonaws.com", user="root", passwd="RooT", db="spider", charset="utf8")
+    conn = pymysql.connect(host="localhost", user="root", passwd="bubargain2012", db="spider", charset="utf8")
     fetch_bilaterals_to_database(conn)
     conn.close()
     logging("[INFO]: Stored " + str(g_stored_counter) + " New Person In Total!")
