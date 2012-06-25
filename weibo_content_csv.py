@@ -10,6 +10,7 @@ import webbrowser
 import pymysql
 import time
 import csv
+import codecs
 
 
 DEFAULT_FETCH_USERS_NUMBER	= 1
@@ -157,10 +158,12 @@ def store_one_user_statuses(conn, statuses, uid):
     file_name = DEFAULT_CSV_PATH + str(uid) + ".csv"
     logging.info("Preparing to write the statues of %s into the file: %s" % (str(uid), file_name))
     safe_path(DEFAULT_CSV_PATH)
-    writer = csv.writer(open(file_name, 'w'))
+    f = codecs.open(file_name, 'w', 'utf-8')
+    writer = csv.writer(f)
     writer.writerow(['uid', 'gender', 'province', 'city', 'weibo_id', 'created_at', 'source', 'text'])
     for status in statuses:
         writer.writerow(status)
+    f.close()
     logging.info("Written all statuses into %s " % file_name)
     g_stored_counter += 1
     #TODO: need to handle the exception here
@@ -307,7 +310,7 @@ def main():
         sys.exit(1)
 
     logging.info("START")
-    conn = pymysql.connect(host="ec2-204-236-172-73.us-west-1.compute.amazonaws.com", user="root", passwd="RooT", db="spider", charset="utf8")
+    conn = pymysql.connect(host="localhost", user="root", passwd="bubargain2012", db="spider", charset="utf8")
     fetch_statuses_to_database(conn)
     conn.close()
     logging.info("Stored " + str(g_stored_counter) + " New Statuses In Total!")
